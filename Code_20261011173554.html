@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>倒计时器</title>
+<style>
+  * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: #05070a; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex; align-items: center; justify-content: center; min-height: 100vh;
+  }
+  #setup {
+    display: flex; flex-direction: column; align-items: center; gap: 30px;
+    background: #0c1018; padding: 40px 50px; border-radius: 20px;
+    box-shadow: 0 0 40px rgba(0,255,136,0.1);
+  }
+  .row { display: flex; align-items: center; gap: 15px; }
+  .col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .label { font-size: 14px; color: #889; letter-spacing: 2px; }
+  .btn {
+    width: 44px; height: 44px; border-radius: 50%; background: #161b24;
+    border: 1px solid #2a3140; color: #00ff88; font-size: 24px; line-height: 42px;
+    text-align: center; cursor: pointer; transition: all 0.15s;
+  }
+  .btn:active { transform: scale(0.85); box-shadow: 0 0 15px #00ff88; background: #1f2630; }
+  .val { font-size: 56px; font-weight: 700; min-width: 80px; text-align: center; font-variant-numeric: tabular-nums; }
+  .colon { font-size: 48px; font-weight: 700; margin-top: 20px; color: #556; }
+  .start {
+    margin-top: 10px; padding: 14px 50px; border-radius: 30px; border: none;
+    background: #00ff88; color: #05070a; font-size: 20px; font-weight: 700;
+    cursor: pointer; letter-spacing: 4px; transition: all 0.15s;
+  }
+  .start:active { transform: scale(0.95); box-shadow: 0 0 25px #00ff88; }
+  .hint { color: #667; font-size: 13px; margin-top: 5px; }
+  #countdown {
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    width: 100vw; height: 100vh; background: #080a10; position: relative;
+  }
+  #progressBar {
+    position: absolute; top: 0; left: 0; height: 6px; width: 100%;
+    background: #00ff88; box-shadow: 0 0 15px #00ff88;
+    /* 移除 transition，完全由 JS 逐帧控制，丝滑不卡 */
+  }
+  #closeBtn {
+    position: absolute; top: 20px; right: 20px; width: 44px; height: 44px;
+    border-radius: 50%; border: 1px solid #2a3140; background: #161b24;
+    color: #fff; font-size: 18px; cursor: pointer; transition: all 0.15s;
+  }
+  #closeBtn:active { transform: scale(0.85); background: #ff0044; }
+  #timeDisplay {
+    font-size: 120px; font-weight: 700; font-variant-numeric: tabular-nums;
+    letter-spacing: 4px; cursor: pointer; text-shadow: 0 0 30px rgba(0,255,136,0.3);
+  }
+  #timeDisplay.warning { animation: pulseGreen 1s infinite alternate; }
+  #timeDisplay.danger { animation: pulseRed 0.5s infinite alternate; }
+  #timeDisplay.critical { animation: pulseCritical 0.25s infinite alternate; }
+  @keyframes pulseGreen { from { opacity: 0.85; } to { opacity: 1; text-shadow: 0 0 40px #00ff88; } }
+  @keyframes pulseRed { from { opacity: 0.7; } to { opacity: 1; text-shadow: 0 0 50px #ff0044; } }
+  @keyframes pulseCritical { from { opacity: 0.5; } to { opacity: 1; text-shadow: 0 0 60px #ff0044; transform: scale(1.02); } }
+  #finishedOverlay {
+    display: none; position: fixed; inset: 0; background: rgba(255,0,68,0.15);
+    align-items: center; justify-content: center; z-index: 10;
+  }
+  #finishedOverlay .panel {
+    background: #0c1018; padding: 40px 50px; border-radius: 20px;
+    border: 1px solid #ff0044; box-shadow: 0 0 40px rgba(255,0,68,0.4);
+    text-align: center;
+  }
+  #finishedOverlay h2 { margin: 0 0 20px; color: #ff0044; font-size: 32px; }
+  #finishedOverlay .exitBtn {
+    padding: 12px 40px; border-radius: 30px; border: none; background: #ff0044;
+    color: #fff; font-size: 18px; font-weight: 700; cursor: pointer; transition: all 0.15s;
+  }
+  #finishedOverlay .exitBtn:active { transform: scale(0.95); box-shadow: 0 0 20px #ff0044; }
+</style>
+</head>
+<body>
+<div id="setup">
+  <div class="row">
+    <div class="col">
+      <div class="label">分</div>
+      <div class="btn" onclick="addMin()">+</div>
+      <div class="val" id="minVal">05</div>
+      <div class="btn" onclick="subMin()">−</div>
+    </div>
+    <div class="colon">:</div>
+    <div class="col">
+      <div class="label">秒</div>
+      <div class="btn" onclick="addSec()">+</div>
+      <div class="val" id="secVal">00</div>
+      <div class="btn" onclick="subSec()">−</div>
+    </div>
+  </div>
+  <button class="start" onclick="start()">开 始</button>
+  <div class="hint">设置时间后点击开始</div>
+</div>
+
+<div id="countdown">
+  <div id="progressBar"></div>
+  <button id="closeBtn" onclick="exit()">✕</button>
+  <div id="timeDisplay" onclick="toggle()"></div>
+</div>
+
+<div id="finishedOverlay">
+  <div class="panel">
+    <h2>时间到！</h2>
+    <button class="exitBtn" onclick="exit()">退 出</button>
+  </div>
+</div>
+
+<script>
+var totalMs = 300000;
+var startTime = 0;
+var remainingMs = 0;
+var rafId = null;
+var secInterval = null;
+var running = false, paused = false, finished = false;
+var pauseStart = 0, pausedTotal = 0;
+
+function updateDisplay() {
+  var m = Math.floor(totalMs / 60000);
+  var s = Math.floor((totalMs % 60000) / 1000);
+  document.getElementById('minVal').textContent = ('0' + m).slice(-2);
+  document.getElementById('secVal').textContent = ('0' + s).slice(-2);
+}
+function addMin() { totalMs = (Math.floor(totalMs/60000) + 1) % 60 * 60000 + (totalMs%60000); updateDisplay(); }
+function subMin() { totalMs = (Math.floor(totalMs/60000) + 59) % 60 * 60000 + (totalMs%60000); updateDisplay(); }
+function addSec() { totalMs = Math.floor(totalMs/60000)*60000 + ((Math.floor(totalMs/1000)%60 + 5) % 60)*1000; updateDisplay(); }
+function subSec() { totalMs = Math.floor(totalMs/60000)*60000 + ((Math.floor(totalMs/1000)%60 + 55) % 60)*1000; updateDisplay(); }
+
+function getAudio() {
+  if (!window._audioCtx) {
+    try { window._audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+  }
+  return window._audioCtx;
+}
+function playBeep() {
+  var ctx = getAudio();
+  if (!ctx) return;
+  var o = ctx.createOscillator(), g = ctx.createGain();
+  o.frequency.value = 880; o.type = 'sine';
+  g.gain.setValueAtTime(0.3, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(); o.stop(ctx.currentTime + 0.15);
+}
+
+function start() {
+  remainingMs = totalMs;
+  pausedTotal = 0;
+  running = true; paused = false; finished = false;
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('countdown').style.display = 'flex';
+  document.getElementById('finishedOverlay').style.display = 'none';
+  document.getElementById('progressBar').style.background = '#00ff88';
+  document.getElementById('progressBar').style.boxShadow = '0 0 15px #00ff88';
+  getAudio();
+  startTime = Date.now();
+  updateUI(remainingMs);
+  // 视觉：逐帧平滑
+  cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(animateProgress);
+  // 数字：每秒跳一次
+  clearInterval(secInterval);
+  secInterval = setInterval(tickSec, 1000);
+  tickSec();
+}
+
+function animateProgress() {
+  if (!running || finished) return;
+  var now = Date.now();
+  var elapsed = (paused ? pauseStart : now) - startTime - pausedTotal;
+  var rem = totalMs - elapsed;
+  if (rem < 0) rem = 0;
+  remainingMs = rem;
+  updateUI(rem);
+  if (rem <= 0) { onFinished(); return; }
+  rafId = requestAnimationFrame(animateProgress);
+}
+
+function tickSec() {
+  if (!running || paused || finished) return;
+  var secs = Math.ceil(remainingMs / 1000);
+  if (secs <= 5 && secs > 0) playBeep();
+}
+
+function updateUI(rem) {
+  var secs = Math.ceil(rem / 1000);
+  var m = Math.floor(secs / 60), s = secs % 60;
+  var display = document.getElementById('timeDisplay');
+  display.textContent = ('0' + m).slice(-2) + ':' + ('0' + s).slice(-2);
+  var pct = rem / totalMs;
+  document.getElementById('progressBar').style.width = (pct * 100) + '%';
+  
+  if (secs <= 5) {
+    display.className = 'critical';
+    document.getElementById('progressBar').style.background = '#ff0044';
+    document.getElementById('progressBar').style.boxShadow = '0 0 20px #ff0044';
+  } else if (secs <= 10) {
+    display.className = 'danger';
+    document.getElementById('progressBar').style.background = '#ff0044';
+    document.getElementById('progressBar').style.boxShadow = '0 0 20px #ff0044';
+  } else if (secs <= 30) {
+    display.className = 'warning';
+    document.getElementById('progressBar').style.background = '#00ff88';
+    document.getElementById('progressBar').style.boxShadow = '0 0 15px #00ff88';
+  } else {
+    display.className = '';
+    document.getElementById('progressBar').style.background = '#00ff88';
+    document.getElementById('progressBar').style.boxShadow = '0 0 15px #00ff88';
+  }
+}
+
+function onFinished() {
+  finished = true; running = false;
+  cancelAnimationFrame(rafId);
+  clearInterval(secInterval);
+  updateUI(0);
+  document.getElementById('finishedOverlay').style.display = 'flex';
+  playBeep(); setTimeout(playBeep, 250); setTimeout(playBeep, 500);
+  if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
+}
+
+function toggle() {
+  if (!running || finished) return;
+  if (!paused) {
+    paused = true; pauseStart = Date.now();
+    document.getElementById('countdown').style.background = '#111';
+  } else {
+    pausedTotal += Date.now() - pauseStart;
+    paused = false;
+    document.getElementById('countdown').style.background = '#080a10';
+    rafId = requestAnimationFrame(animateProgress);
+  }
+}
+
+function exit() {
+  running = false; paused = false; finished = false;
+  cancelAnimationFrame(rafId);
+  clearInterval(secInterval);
+  document.getElementById('countdown').style.display = 'none';
+  document.getElementById('setup').style.display = 'flex';
+  document.getElementById('finishedOverlay').style.display = 'none';
+  document.getElementById('progressBar').style.background = '#00ff88';
+  document.getElementById('progressBar').style.boxShadow = '0 0 15px #00ff88';
+  document.getElementById('progressBar').style.width = '100%';
+  updateDisplay();
+}
+updateDisplay();
+</script>
+</body>
+</html>
